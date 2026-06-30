@@ -185,25 +185,3 @@ Expected response:
 ├── requirements.txt       # Python dependencies for the serving container
 └── README.md
 ```
-
----
-
-## Known limitations / what a production version would add
-
-This project intentionally keeps a few things simple to stay focused on demonstrating Kubernetes/Kubeflow orchestration skills rather than building a full production system:
-
-- **No automatic handoff between training and serving.** Right now, a newly trained model isn't automatically picked up by the serving Pod — in production this would go through a model registry (e.g., MLflow Model Registry) with the serving layer pulling the latest approved model automatically.
-- **Data source is a built-in dataset, not a live external source.** This removes network/API flakiness as a point of failure, keeping the focus on the pipeline mechanics rather than data engineering.
-- **Single replica serving deployment.** A production setup would run multiple replicas behind the Service for high availability and load distribution.
-
----
-
-## What this project demonstrates
-
-- Setting up and operating a local Kubernetes cluster
-- Installing and configuring Kubeflow Pipelines on Kubernetes
-- Writing a multi-stage ML pipeline as a Kubernetes-native DAG (using the KFP Python SDK)
-- Implementing a real data-quality gate that halts a pipeline on bad data
-- Containerizing a Python ML service with Docker
-- Deploying a model as a REST API on Kubernetes, with health/readiness probes for self-healing
-- Understanding the architectural separation between batch training workflows and real-time serving workloads
