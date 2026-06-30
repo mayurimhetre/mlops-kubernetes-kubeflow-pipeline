@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iris-classifier
+  labels:
+    app: iris-classifier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iris-classifier
+  template:
+    metadata:
+      labels:
+        app: iris-classifier
+    spec:
+      containers:
+        - name: iris-classifier
+          image: iris-classifier:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iris-classifier-service
+spec:
+  selector:
+    app: iris-classifier
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP

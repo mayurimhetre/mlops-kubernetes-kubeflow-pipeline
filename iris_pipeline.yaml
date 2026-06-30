@@ -1,0 +1,203 @@
+# PIPELINE DEFINITION
+# Name: iris-fetch-validate-train
+# Description: Fetch, validate, and train on Iris data
+components:
+  comp-fetch-data:
+    executorLabel: exec-fetch-data
+    outputDefinitions:
+      artifacts:
+        output_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        input_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        accuracy_metric:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+        model_output:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-validate-data:
+    executorLabel: exec-validate-data
+    inputDefinitions:
+      artifacts:
+        input_csv:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-fetch-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - fetch_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef fetch_data(output_csv: dsl.Output[dsl.Dataset]):\n    from sklearn.datasets\
+          \ import load_iris\n    iris = load_iris(as_frame=True)\n    df = iris.frame\n\
+          \    df.to_csv(output_csv.path, index=False)\n    print(f\"Fetched {len(df)}\
+          \ rows.\")\n\n"
+        image: python:3.11-slim
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas' 'scikit-learn'\
+          \ 'joblib'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    input_csv: dsl.Input[dsl.Dataset],\n    model_output:\
+          \ dsl.Output[dsl.Model],\n    accuracy_metric: dsl.Output[dsl.Metrics],\n\
+          ):\n    import pandas as pd\n    import joblib\n    from sklearn.model_selection\
+          \ import train_test_split\n    from sklearn.ensemble import RandomForestClassifier\n\
+          \    from sklearn.metrics import accuracy_score, f1_score\n\n    df = pd.read_csv(input_csv.path)\n\
+          \    X = df.drop(columns=[\"target\"])\n    y = df[\"target\"]\n\n    X_train,\
+          \ X_test, y_train, y_test = train_test_split(\n        X, y, test_size=0.2,\
+          \ random_state=42, stratify=y\n    )\n\n    model = RandomForestClassifier(n_estimators=100,\
+          \ random_state=42)\n    model.fit(X_train, y_train)\n\n    y_pred = model.predict(X_test)\n\
+          \    accuracy = accuracy_score(y_test, y_pred)\n    f1 = f1_score(y_test,\
+          \ y_pred, average=\"macro\")\n\n    print(f\"Accuracy: {accuracy:.4f}, F1:\
+          \ {f1:.4f}\")\n\n    joblib.dump(model, model_output.path)\n    accuracy_metric.log_metric(\"\
+          accuracy\", accuracy)\n    accuracy_metric.log_metric(\"f1_macro\", f1)\n\
+          \n"
+        image: python:3.11-slim
+    exec-validate-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - validate_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef validate_data(input_csv: dsl.Input[dsl.Dataset]):\n    import\
+          \ pandas as pd\n    import sys\n\n    df = pd.read_csv(input_csv.path)\n\
+          \    errors = []\n\n    expected_columns = [\n        \"sepal length (cm)\"\
+          , \"sepal width (cm)\",\n        \"petal length (cm)\", \"petal width (cm)\"\
+          , \"target\"\n    ]\n    if list(df.columns) != expected_columns:\n    \
+          \    errors.append(f\"Column mismatch: {list(df.columns)}\")\n    if len(df)\
+          \ < 50:\n        errors.append(f\"Too few rows: {len(df)}\")\n    if df.isnull().values.any():\n\
+          \        errors.append(\"Null values found\")\n    feature_cols = expected_columns[:-1]\n\
+          \    for col in feature_cols:\n        if (df[col] <= 0).any() or (df[col]\
+          \ > 20).any():\n            errors.append(f\"Out-of-range values in '{col}'\"\
+          )\n    if set(df[\"target\"].unique()) - {0, 1, 2}:\n        errors.append(\"\
+          Unexpected target classes\")\n\n    if errors:\n        print(\"VALIDATION\
+          \ FAILED:\")\n        for e in errors:\n            print(f\"  - {e}\")\n\
+          \        sys.exit(1)\n    print(f\"VALIDATION PASSED: {len(df)} rows OK.\"\
+          )\n\n"
+        image: python:3.11-slim
+pipelineInfo:
+  description: Fetch, validate, and train on Iris data
+  name: iris-fetch-validate-train
+root:
+  dag:
+    tasks:
+      fetch-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-fetch-data
+        taskInfo:
+          name: fetch-data
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - fetch-data
+        - validate-data
+        inputs:
+          artifacts:
+            input_csv:
+              taskOutputArtifact:
+                outputArtifactKey: output_csv
+                producerTask: fetch-data
+        taskInfo:
+          name: train-model
+      validate-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-validate-data
+        dependentTasks:
+        - fetch-data
+        inputs:
+          artifacts:
+            input_csv:
+              taskOutputArtifact:
+                outputArtifactKey: output_csv
+                producerTask: fetch-data
+        taskInfo:
+          name: validate-data
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.1
