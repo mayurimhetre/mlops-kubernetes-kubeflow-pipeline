@@ -101,7 +101,7 @@ The trained model is packaged into a small web service (built with FastAPI) and 
 ---
 Kubeflow Diagram
 
-![Investment Memo](screenshots/01_app.png)
+![Kubeflow Diagram](screenshots/kubeflow_pipeline.png)
 ---
 
 ## How to run this yourself
